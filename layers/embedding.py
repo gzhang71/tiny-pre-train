@@ -1,6 +1,6 @@
 import numpy as np
-from tiny_ml.core.module import Layer
-from tiny_ml.core.prameter import Parameter
+from core.module import Layer
+from core.parameter import Parameter
 
 
 class Embedding(Layer):

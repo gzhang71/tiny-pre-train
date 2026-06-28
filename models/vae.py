@@ -18,10 +18,10 @@ Usage:
     optimizer.step()
 """
 import numpy as np
-from tiny_ml.core.module import Model
-from tiny_ml.layers.linear import Linear
-from tiny_ml.layers.activations import ReLU
-from tiny_ml.models.sequential import Sequential
+from core.module import Model
+from layers.linear import Linear
+from layers.activations import ReLU
+from models.sequential import Sequential
 
 
 def _build_mlp(dims: list[int], activation_cls=ReLU) -> Sequential:

@@ -2,7 +2,7 @@
 Activation functions with analytic backward passes.
 """
 import numpy as np
-from tiny_ml.core.module import Activation
+from core.module import Activation
 
 
 class ReLU(Activation):

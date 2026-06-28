@@ -1,5 +1,5 @@
 import numpy as np
-from tiny_ml.core.module import Loss
+from core.module import Loss
 
 
 class MSELoss(Loss):

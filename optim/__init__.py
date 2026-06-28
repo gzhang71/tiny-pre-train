@@ -1,3 +1,3 @@
-from tiny_ml.optim.sgd import SGD
-from tiny_ml.optim.momentum import Momentum
-from tiny_ml.optim.adam import ADAM
+from optim.sgd import SGD
+from optim.momentum import Momentum
+from optim.adam import ADAM

@@ -1,8 +1,8 @@
 import numpy as np
-from tiny_ml.core.module import Model, Layer
-from tiny_ml.core.prameter import Parameter
-from tiny_ml.layers.linear import Linear
-from tiny_ml.layers.activations import ReLU
+from core.module import Model, Layer
+from core.parameter import Parameter
+from layers.linear import Linear
+from layers.activations import ReLU
 
 
 class ResidualBlock(Layer):

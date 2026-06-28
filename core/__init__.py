@@ -1,2 +1,2 @@
-from tiny_ml.core.module import Module, Layer, Activation, Loss, Optimizer, Model
-from tiny_ml.core.prameter import Parameter
+from core.module import Module, Layer, Activation, Loss, Optimizer, Model
+from core.parameter import Parameter

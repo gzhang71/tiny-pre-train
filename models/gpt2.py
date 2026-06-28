@@ -14,12 +14,11 @@ Usage:
     token_ids = model.generate(prompt, max_new_tokens=50)
 """
 import numpy as np
-from tiny_ml.core.module import Layer, Model
-from tiny_ml.layers.linear import Linear
-from tiny_ml.layers.activations import GeLU
-from tiny_ml.layers.normalization import LayerNorm
-from tiny_ml.layers.embedding import Embedding, LearnedPositionalEmbedding
-from tiny_ml.models.transformer import TransformerBlock
+from core.module import Layer, Model
+from layers.activations import GeLU
+from layers.normalization import LayerNorm
+from layers.embedding import Embedding, LearnedPositionalEmbedding
+from models.transformer import TransformerBlock
 
 
 class _TiedProjection(Layer):

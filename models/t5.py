@@ -15,12 +15,12 @@ Usage:
     model.backward(grad)
 """
 import numpy as np
-from tiny_ml.core.module import Layer, Model
-from tiny_ml.core.prameter import Parameter
-from tiny_ml.layers.linear import Linear
-from tiny_ml.layers.normalization import LayerNorm
-from tiny_ml.layers.embedding import Embedding
-from tiny_ml.models.transformer import FeedForward
+from core.module import Layer, Model
+from core.parameter import Parameter
+from layers.linear import Linear
+from layers.normalization import LayerNorm
+from layers.embedding import Embedding
+from models.transformer import FeedForward
 
 
 # ---------------------------------------------------------------------------

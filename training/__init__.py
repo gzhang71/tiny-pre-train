@@ -1,1 +1,1 @@
-from tiny_ml.training.trainer import Trainer
+from training.trainer import Trainer

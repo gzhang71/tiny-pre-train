@@ -3,7 +3,7 @@ Abstract base classes for all modules.
 """
 import numpy as np
 from abc import ABC, abstractmethod
-from tiny_ml.core.prameter import Parameter
+from core.parameter import Parameter
 
 
 class Module(ABC):

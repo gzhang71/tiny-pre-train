@@ -1,6 +1,6 @@
 import numpy as np
-from tiny_ml.core.module import Optimizer
-from tiny_ml.core.prameter import Parameter
+from core.module import Optimizer
+from core.parameter import Parameter
 
 
 class ADAM(Optimizer):

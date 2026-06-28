@@ -3,10 +3,10 @@ Classification demo: 2-class spiral dataset classified with an MLP.
 Run from the repo root: python -m tiny_ml.examples.classification
 """
 import numpy as np
-from tiny_ml.models.mlp import MLP
-from tiny_ml.losses.losses import SoftmaxCrossEntropy
-from tiny_ml.optim.adam import ADAM
-from tiny_ml.training.trainer import Trainer
+from models.mlp import MLP
+from losses.losses import SoftmaxCrossEntropy
+from optim.adam import ADAM
+from training.trainer import Trainer
 
 
 def make_spiral(n_per_class: int = 200, noise: float = 0.15) -> tuple:

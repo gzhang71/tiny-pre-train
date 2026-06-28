@@ -1,5 +1,5 @@
 import numpy as np
-from tiny_ml.core.module import Model, Loss, Optimizer
+from core.module import Model, Loss, Optimizer
 
 
 class Trainer:

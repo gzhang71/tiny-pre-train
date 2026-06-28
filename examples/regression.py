@@ -3,10 +3,10 @@ Regression demo: fit a noisy sine wave with an MLP + MSE loss.
 Run from the repo root: python -m tiny_ml.examples.regression
 """
 import numpy as np
-from tiny_ml.models.mlp import MLP
-from tiny_ml.losses.losses import MSELoss
-from tiny_ml.optim.adam import ADAM
-from tiny_ml.training.trainer import Trainer
+from models.mlp import MLP
+from losses.losses import MSELoss
+from optim.adam import ADAM
+from training.trainer import Trainer
 
 
 def main():

@@ -5,11 +5,11 @@ Components exposed:
   MultiHeadAttention, FeedForward, TransformerBlock, Transformer
 """
 import numpy as np
-from tiny_ml.core.module import Layer, Model
-from tiny_ml.layers.linear import Linear
-from tiny_ml.layers.activations import ReLU
-from tiny_ml.layers.normalization import LayerNorm
-from tiny_ml.layers.embedding import Embedding, SinusoidalPositionalEmbedding
+from core.module import Layer, Model
+from layers.linear import Linear
+from layers.activations import ReLU
+from layers.normalization import LayerNorm
+from layers.embedding import Embedding, SinusoidalPositionalEmbedding
 
 
 # ---------------------------------------------------------------------------
