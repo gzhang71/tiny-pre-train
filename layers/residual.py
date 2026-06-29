@@ -20,13 +20,16 @@ class ResidualBlock(Layer):
     def forward(self, x: np.ndarray) -> np.ndarray:
         self._skip = x
         out = self.relu1.forward(self.linear1.forward(x))
+        out = self.linear2.forward(out)
         out = out + x
         return self.relu2.forward(out)
 
     def backward(self, grad: np.ndarray) -> np.ndarray:
         grad = self.relu2.backward(grad)
         grad_skip = grad
-        grad = self.linear1.backward(self.relu1.backward(self.linear2.backward(grad)))
+        grad = self.linear2.backward(grad)
+        grad = self.relu1.backward(grad)
+        grad = self.linear1.backward(grad)
         return grad + grad_skip
 
     def parameters(self) -> list:
