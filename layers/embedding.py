@@ -1,4 +1,4 @@
-import numpy as np
+from core.backend import xp as np, randn, scatter_add
 from core.module import Layer
 from core.parameter import Parameter
 
@@ -7,7 +7,7 @@ class Embedding(Layer):
     """Integer token → dense vector lookup."""
 
     def __init__(self, vocab_size: int, d_model: int):
-        self.W = Parameter(np.random.randn(vocab_size, d_model) * 0.02)
+        self.W = Parameter(randn(vocab_size, d_model) * 0.02)
         self._tokens: np.ndarray | None = None
 
     def forward(self, tokens: np.ndarray) -> np.ndarray:
@@ -15,7 +15,7 @@ class Embedding(Layer):
         return self.W.data[tokens]
 
     def backward(self, grad: np.ndarray) -> np.ndarray:
-        np.add.at(self.W.grad, self._tokens, grad)
+        self.W.grad = scatter_add(self.W.grad, self._tokens, grad)
         return None  # no gradient flows to integer token indices
 
 
@@ -31,9 +31,8 @@ class SinusoidalPositionalEmbedding(Layer):
     def __init__(self, d_model: int, max_seq_len: int = 512):
         pos = np.arange(max_seq_len)[:, None]
         div = np.exp(np.arange(0, d_model, 2) * (-np.log(10000.0) / d_model))
-        pe = np.zeros((max_seq_len, d_model))
-        pe[:, 0::2] = np.sin(pos * div)
-        pe[:, 1::2] = np.cos(pos * div)
+        # interleave sin (even dims) and cos (odd dims) without item assignment
+        pe = np.stack([np.sin(pos * div), np.cos(pos * div)], axis=2).reshape(max_seq_len, d_model)
         self._pe = pe[None]  # (1, max_seq_len, d_model)
 
     def forward(self, x: np.ndarray, offset: int = 0) -> np.ndarray:
@@ -56,7 +55,7 @@ class LearnedPositionalEmbedding(Layer):
     """
 
     def __init__(self, max_seq_len: int, d_model: int):
-        self.W = Parameter(np.random.randn(max_seq_len, d_model) * 0.02)
+        self.W = Parameter(randn(max_seq_len, d_model) * 0.02)
         self._T: int = 0
         self._offset: int = 0
 
@@ -66,7 +65,9 @@ class LearnedPositionalEmbedding(Layer):
         return x + self.W.data[offset: offset + self._T]
 
     def backward(self, grad: np.ndarray) -> np.ndarray:
-        self.W.grad[self._offset: self._offset + self._T] += grad.sum(axis=0)  # sum over batch
+        self.W.grad = scatter_add(
+            self.W.grad, slice(self._offset, self._offset + self._T), grad.sum(axis=0)
+        )  # sum over batch
         return grad  # identity for the residual path
 
 
@@ -82,7 +83,7 @@ class FeatureEmbedding(Layer):
     """
 
     def __init__(self, n_features: int, d_model: int):
-        self.W = Parameter(np.random.randn(n_features, d_model) * np.sqrt(2.0 / n_features))
+        self.W = Parameter(randn(n_features, d_model) * np.sqrt(2.0 / n_features))
         self.bias = Parameter(np.zeros((n_features, d_model)))
         self._x: np.ndarray | None = None
 

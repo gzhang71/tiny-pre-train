@@ -1,7 +1,7 @@
 """
 Activation functions with analytic backward passes.
 """
-import numpy as np
+from core.backend import xp as np
 from core.module import Activation
 
 

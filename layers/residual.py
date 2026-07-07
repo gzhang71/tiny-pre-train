@@ -1,4 +1,4 @@
-import numpy as np
+from core.backend import xp as np
 from core.module import Layer
 from layers.linear import Linear
 from layers.activations import ReLU

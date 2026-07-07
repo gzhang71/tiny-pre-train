@@ -1,4 +1,4 @@
-import numpy as np
+from core.backend import xp as np, randn
 from core.module import Layer
 from core.parameter import Parameter
 
@@ -7,7 +7,7 @@ class Linear(Layer):
     """Fully-connected layer: out = x @ W + b"""
 
     def __init__(self, in_features: int, out_features: int):
-        self.W = Parameter(np.random.randn(in_features, out_features) * np.sqrt(2.0 / in_features))
+        self.W = Parameter(randn(in_features, out_features) * np.sqrt(2.0 / in_features))
         self.b = Parameter(np.zeros(out_features))
         self._input: np.ndarray | None = None
 

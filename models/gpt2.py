@@ -13,7 +13,7 @@ Usage:
     model.backward(grad)
     token_ids = model.generate(prompt, max_new_tokens=50)
 """
-import numpy as np
+from core.backend import xp as np, sample_categorical
 from core.module import Model
 from layers.activations import GeLU
 from layers.normalization import LayerNorm
@@ -126,9 +126,8 @@ class GPT2(Model):
                 next_logits = np.where(next_logits >= threshold, next_logits, -1e9)
 
             probs = np.exp(next_logits - next_logits.max())
-            probs /= probs.sum()
-            next_token = np.random.choice(len(probs), p=probs)
-            tokens = np.concatenate([tokens, [[next_token]]], axis=1)
+            next_token = sample_categorical(probs)
+            tokens = np.concatenate([tokens, np.array([[next_token]])], axis=1)
             logits = self.forward(np.array([[next_token]]), use_cache=True)  # decode step
 
         self.reset_cache()

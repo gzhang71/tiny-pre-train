@@ -1,4 +1,4 @@
-import numpy as np
+from core.backend import xp as np
 from core.module import Optimizer
 from core.parameter import Parameter
 

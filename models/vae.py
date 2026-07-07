@@ -17,7 +17,7 @@ Usage:
     vae.backward(recon_grad, beta=beta)
     optimizer.step()
 """
-import numpy as np
+from core.backend import xp as np, randn
 from core.module import Model
 from layers.linear import Linear
 from models.mlp import MLP
@@ -74,7 +74,7 @@ class VAE(Model):
         self.encoder.backward(d_h)
 
     def _reparameterize(self, mu: np.ndarray, log_var: np.ndarray) -> np.ndarray:
-        self._eps = np.random.randn(*mu.shape)
+        self._eps = randn(*mu.shape)
         return mu + self._eps * np.exp(0.5 * log_var)
 
     def kl_loss(self) -> float:
@@ -93,7 +93,7 @@ class VAE(Model):
         """Generate n samples by decoding random latent vectors."""
         if latent_dim is None:
             latent_dim = self.mu_head.W.data.shape[1]
-        return self.decode(np.random.randn(n, latent_dim))
+        return self.decode(randn(n, latent_dim))
 
     def parameters(self) -> list:
         return (

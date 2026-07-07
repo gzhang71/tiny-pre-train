@@ -1,4 +1,4 @@
-import numpy as np
+from core.backend import xp as np, scatter_add
 from core.module import Layer
 from core.parameter import Parameter
 from layers.linear import Linear
@@ -188,7 +188,7 @@ class RelativePositionBias(Layer):
 
     def backward(self, grad: np.ndarray) -> None:
         for h in range(self.n_heads):
-            np.add.at(self.W.grad[h], self._buckets, grad[h])
+            self.W.grad = scatter_add(self.W.grad, (h, self._buckets), grad[h])
 
 
 class T5SelfAttention(Layer):

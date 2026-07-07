@@ -1,7 +1,7 @@
 """
 Abstract base classes for all modules.
 """
-import numpy as np
+from core.backend import xp as np
 from abc import ABC, abstractmethod
 from core.parameter import Parameter
 

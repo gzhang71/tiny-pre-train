@@ -60,7 +60,32 @@ optimizer.step()                # mutates .data on all Parameters
 
 `Module.parameters()` collects `Parameter` objects by recursing through `__dict__`, so composite modules automatically expose all their leaf parameters without any registration boilerplate.
 
+## JAX backend (optional speedup)
+
+The library runs on numpy by default. Set `TINY_ML_BACKEND=jax` to route every array
+operation through `jax.numpy`/XLA instead — no code changes needed:
+
+```bash
+TINY_ML_BACKEND=jax python -m tiny_ml.examples.gpt2      # float64, matches numpy exactly
+TINY_ML_BACKEND=jax TINY_ML_JAX_X64=0 python -m tiny_ml.examples.gpt2  # float32, fastest
+```
+
+With the same seed, jax float64 mode reproduces numpy results bit-for-bit. Rough numbers on
+an Apple-silicon CPU for a GPT-2-style model (d_model=512, 6 layers, batch 8, seq 256):
+
+| backend        | train step |
+|----------------|-----------:|
+| numpy          |    1.26 s  |
+| jax (float64)  |    1.29 s  |
+| jax (float32)  |    0.65 s  |
+
+Use JAX mode for **training and batched forward passes**, and bigger wins are expected on
+GPU/TPU. Token-by-token `generate()` is *slower* under JAX (per-op dispatch overhead, plus
+XLA recompiles ops as the KV cache grows one token per step) — stick with numpy for
+generation.
+
 ## Dependencies
 
 - Python 3.10+
 - NumPy
+- JAX (optional, only for `TINY_ML_BACKEND=jax`)

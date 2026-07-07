@@ -14,7 +14,7 @@ Usage:
     logits = model.forward(src_tokens, tgt_tokens)   # (B, T_dec, vocab_size)
     model.backward(grad)
 """
-import numpy as np
+from core.backend import xp as np, scatter_add, sample_categorical
 from core.module import Layer, Model
 from layers.normalization import LayerNorm
 from layers.embedding import Embedding
@@ -169,12 +169,12 @@ class T5(Model):
             grad, d_enc_out = block.backward(grad)
             d_enc_out_total += d_enc_out
         # shared_emb._tokens was overwritten by tgt forward; bypass cached method
-        np.add.at(self.shared_emb.W.grad, self._tgt_tokens, grad)
+        self.shared_emb.W.grad = scatter_add(self.shared_emb.W.grad, self._tgt_tokens, grad)
 
         grad_enc = self.encoder_norm.backward(d_enc_out_total)
         for block in reversed(self.encoder_blocks):
             grad_enc = block.backward(grad_enc)
-        np.add.at(self.shared_emb.W.grad, self._src_tokens, grad_enc)
+        self.shared_emb.W.grad = scatter_add(self.shared_emb.W.grad, self._src_tokens, grad_enc)
 
     def generate(
         self,
@@ -209,8 +209,7 @@ class T5(Model):
                 next_logits = np.where(next_logits >= threshold, next_logits, -1e9)
 
             probs = np.exp(next_logits - next_logits.max())
-            probs /= probs.sum()
-            next_token = int(np.random.choice(len(probs), p=probs))
+            next_token = sample_categorical(probs)
             if eos_token is not None and next_token == eos_token:
                 break
             generated.append(next_token)

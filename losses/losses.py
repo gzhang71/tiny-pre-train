@@ -1,4 +1,4 @@
-import numpy as np
+from core.backend import xp as np
 from core.module import Loss
 
 
@@ -26,8 +26,9 @@ class SoftmaxCrossEntropy(Loss):
 
         n = logits.shape[0]
         if targets.ndim == 1:
-            self._one_hot = np.zeros_like(self._probs)
-            self._one_hot[np.arange(n), targets.astype(int)] = 1.0
+            # comparison-based one-hot: works on immutable (JAX) arrays too
+            classes = np.arange(self._probs.shape[-1])
+            self._one_hot = (targets.astype(int)[:, None] == classes).astype(self._probs.dtype)
         else:
             self._one_hot = targets
 

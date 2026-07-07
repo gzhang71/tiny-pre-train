@@ -38,6 +38,24 @@ from layers.linear import Linear
 ```
 This requires the repo root (`tiny_ml/`) to be on `sys.path`.
 
+### Array backend (numpy / JAX)
+
+Library modules never import numpy directly — they use `from core.backend import xp as np`,
+which resolves to numpy (default) or `jax.numpy` when `TINY_ML_BACKEND=jax` is set before
+import. `TINY_ML_JAX_X64=0` switches JAX to float32 (faster; float64 default matches numpy
+bit-for-bit). Rules that keep code backend-portable:
+
+- **No in-place array mutation.** JAX arrays are immutable. Attribute-level `p.grad += g` is
+  fine (Python rebinds), but `arr[idx] = v` / `arr[idx] += v` / `np.add.at` are not — use
+  `backend.scatter_add(arr, idx, updates)` and assign the result back.
+- **No `np.random`.** `jax.numpy` has no `random` module. Use `backend.randn(*shape)` for
+  init/noise and `backend.sample_categorical(probs)` for sampling — both draw from real
+  numpy's RNG so `np.random.seed()` behaves identically in both modes.
+- `examples/`, `training/trainer.py`, and `metrics/` keep plain numpy (bookkeeping only).
+- JAX mode speeds up **training and batched forward passes** (~2x at float32). Token-by-token
+  `generate()` is *slower* under JAX (per-op dispatch + recompilation as the KV cache shape
+  grows each step) — use the numpy backend for generation.
+
 ### Layer contract
 
 Each layer stores the inputs it needs for backward in `self._<name>` during `forward`, then uses them in `backward`. There is no tape — if you call `forward` twice before `backward`, the second call overwrites the saved state.
