@@ -44,6 +44,33 @@ python -m tiny_ml.examples.t5           # seq2seq copy task
 python -m tiny_ml.examples.vae          # 2D cluster reconstruction
 ```
 
+## Workflow
+
+The typical path from data to trained model is four steps: build a model from the pieces in `models/` (or compose your own from `layers/`), pick a loss and an optimizer, hand all three to `Trainer`, then evaluate or predict. From `examples/mlp.py`:
+
+```python
+import numpy as np
+from models.mlp import MLP
+from losses.losses import SoftmaxCrossEntropy
+from optim.adam import ADAM
+from training.trainer import Trainer
+
+# 1. model — layer sizes: 2 inputs → two hidden layers → 2 classes
+model = MLP([2, 64, 32, 2])
+
+# 2. loss + optimizer — the optimizer takes the flat parameter list
+trainer = Trainer(model, SoftmaxCrossEntropy(), ADAM(model.parameters(), lr=3e-3))
+
+# 3. train — shuffles and batches internally
+trainer.fit(x, y, epochs=100, batch_size=64)
+
+# 4. evaluate / predict
+logits = trainer.predict(x)
+accuracy = (logits.argmax(axis=1) == y).mean()
+```
+
+If you need more control than `fit()` gives you (custom schedules, gradient inspection, multi-input models like T5), drop down to `trainer.train_step(x, y)` per batch, or write the five-line loop yourself — see the next section. For the generative models, skip `Trainer` for inference and call `model.generate(...)` directly (see `examples/gpt2.py` and `examples/t5.py`).
+
 ## How it works
 
 There is no autograd engine. Every layer manually implements `forward` and `backward`, saving the tensors it needs for the gradient computation during the forward pass. The backward pass is called explicitly after computing the loss gradient.
@@ -59,6 +86,43 @@ optimizer.step()                # mutates .data on all Parameters
 ```
 
 `Module.parameters()` collects `Parameter` objects by recursing through `__dict__`, so composite modules automatically expose all their leaf parameters without any registration boilerplate.
+
+## Architecture
+
+```
+tiny_ml/
+├── core/                  # foundations everything else builds on
+│   ├── parameter.py       #   Parameter — numpy array + .grad field (the only weight leaf)
+│   ├── module.py          #   Module, Layer, Model, Loss, Optimizer base classes
+│   └── backend.py         #   array backend (numpy or jax.numpy via TINY_ML_BACKEND)
+├── layers/                # reusable building blocks
+│   ├── linear.py          #   Linear
+│   ├── activations.py     #   ReLU, Sigmoid, Tanh, GeLU
+│   ├── normalization.py   #   LayerNorm
+│   ├── embedding.py       #   Embedding + positional/feature variants
+│   ├── feedforward.py     #   FeedForward (position-wise FFN)
+│   ├── residual.py        #   ResidualBlock
+│   └── attention.py       #   MultiHeadAttention, TransformerBlock, T5/cross attention
+├── models/                # full models composed from layers
+│   ├── mlp.py             #   MLP
+│   ├── sequential.py      #   Sequential
+│   ├── resnet.py          #   ResNet
+│   ├── transformer.py     #   Transformer (GPT-style decoder-only)
+│   ├── gpt2.py            #   GPT2 (learned positions, weight tying, generate())
+│   ├── t5.py              #   T5 (encoder-decoder)
+│   └── vae.py             #   VAE
+├── losses/                # MSELoss, SoftmaxCrossEntropy, BinaryCrossEntropy
+├── optim/                 # SGD, Momentum, ADAM
+├── metrics/               # precision, recall, f1_score, accuracy
+├── training/              # Trainer (fit / predict / evaluate loop)
+└── examples/              # one runnable script per model
+```
+
+**Class hierarchy.** `Module` is the root: its `parameters()` recurses through `__dict__`, collecting every `Parameter` and nested `Module`, so composition alone wires up the parameter tree. `Layer` and `Model` subclass `Module` purely for naming — layers are building blocks, models are top-level compositions. `Loss` is a separate hierarchy (`forward` returns a scalar, `backward` returns `d_loss/d_pred` from stored state), and `Optimizer` takes the flat parameter list and mutates `.data` in `step()`.
+
+**Data flow.** Each layer stores whatever `forward` computed that `backward` needs in `self._<name>` attributes — there is no tape, so calling `forward` twice before `backward` overwrites that state. Gradients flow top-down: the loss produces the initial gradient, each module's `backward` populates `.grad` on its own parameters and returns the gradient for its input.
+
+**Backend isolation.** Library code never imports numpy directly; everything goes through `core/backend.py` (`from core.backend import xp as np`), which is what lets the same code run on numpy or JAX. Examples, `Trainer`, and metrics use plain numpy since they only do bookkeeping.
 
 ## JAX backend (optional speedup)
 
