@@ -48,6 +48,54 @@ class SinusoidalPositionalEmbedding(Layer):
         return []
 
 
+class RotaryPositionalEmbedding(Layer):
+    """Rotary position embedding (RoPE, Su et al. 2021 / RoFormer).
+
+    Unlike the additive positional embeddings above, RoPE is applied to the
+    *queries and keys inside attention*, per head: consecutive dimension
+    pairs (x[2i], x[2i+1]) are rotated by angle pos · θ_i with the sinusoidal
+    frequency spectrum θ_i = base^(−2i/d). Rotation is norm-preserving and
+    makes qᵀk depend only on the *relative* offset between the two positions,
+    so nothing is ever added to the residual stream. Used via `RoPEAttention`,
+    which rotates Q and K with the same instance — safe despite the
+    save-for-backward contract because both calls share (offset, T).
+
+    forward(x: (..., T, d_head), offset) → same shape; `offset` is the
+    absolute position of the first timestep (KV-cache decoding).
+    """
+
+    def __init__(self, d_head: int, max_seq_len: int = 512, base: float = 10000.0):
+        assert d_head % 2 == 0, "RoPE rotates dimension pairs; d_head must be even"
+        pos = np.arange(max_seq_len)[:, None]
+        theta = base ** (-np.arange(0, d_head, 2) / d_head)
+        self._cos = np.cos(pos * theta)  # (max_seq_len, d_head/2)
+        self._sin = np.sin(pos * theta)
+        self._T: int = 0
+        self._offset: int = 0
+
+    def forward(self, x: np.ndarray, offset: int = 0) -> np.ndarray:
+        self._T, self._offset = x.shape[-2], offset
+        # take_slice: offset changes every decode step (recompile concern)
+        cos = take_slice(self._cos, offset, self._T, axis=0)
+        sin = take_slice(self._sin, offset, self._T, axis=0)
+        x1, x2 = x[..., 0::2], x[..., 1::2]
+        return np.stack(
+            [x1 * cos - x2 * sin, x1 * sin + x2 * cos], axis=-1
+        ).reshape(x.shape)
+
+    def backward(self, grad: np.ndarray) -> np.ndarray:
+        # rotation is orthogonal: the gradient is the inverse rotation (−θ)
+        cos = take_slice(self._cos, self._offset, self._T, axis=0)
+        sin = take_slice(self._sin, self._offset, self._T, axis=0)
+        g1, g2 = grad[..., 0::2], grad[..., 1::2]
+        return np.stack(
+            [g1 * cos + g2 * sin, g2 * cos - g1 * sin], axis=-1
+        ).reshape(grad.shape)
+
+    def parameters(self) -> list:
+        return []
+
+
 class LearnedPositionalEmbedding(Layer):
     """Learnable position embedding (GPT-2 style).
 

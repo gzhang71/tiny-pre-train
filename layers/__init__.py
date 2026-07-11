@@ -4,6 +4,7 @@ from layers.normalization import LayerNorm
 from layers.embedding import (
     Embedding,
     SinusoidalPositionalEmbedding,
+    RotaryPositionalEmbedding,
     LearnedPositionalEmbedding,
     FeatureEmbedding,
 )
@@ -12,6 +13,7 @@ from layers.residual import ResidualBlock
 from layers.attention import (
     Attention,
     MultiHeadAttention,
+    RoPEAttention,
     TransformerBlock,
     RelativePositionBias,
     T5SelfAttention,

@@ -4,7 +4,7 @@ from core.parameter import Parameter
 from layers.linear import Linear
 from layers.normalization import LayerNorm
 from layers.feedforward import FeedForward
-from layers.embedding import Embedding
+from layers.embedding import Embedding, RotaryPositionalEmbedding
 
 
 def _softmax(x: np.ndarray) -> np.ndarray:
@@ -32,6 +32,12 @@ class Attention(Layer):
       `_score_bias_backward(d_scores)` — an additive (n_heads, seq_q, seq_k)
       score bias. The default is none; T5SelfAttention returns its relative
       position bias. Applied in both the uncached and cached paths.
+    - `_position_encode(Q, K, offset) -> (Q, K)` and
+      `_position_encode_backward(dQ, dK) -> (dQ, dK)` — a per-head transform
+      of queries/keys right after the projections, before the attention core
+      or the KV cache sees them. The default is identity; RoPEAttention
+      rotates by absolute position (`offset` is the cache length when
+      decoding, so cached keys are stored already rotated).
 
     KV cache (`forward(x, use_cache=True)`) is inference-only: new keys/values
     are written into a cache *preallocated* at `max_cache_len` so every decode
@@ -83,6 +89,13 @@ class Attention(Layer):
     def _score_bias_backward(self, d_scores: np.ndarray) -> None:
         """Receives d_scores (B, H, seq_q, seq_k) *before* the 1/√d_k scaling."""
 
+    def _position_encode(self, Q: np.ndarray, K: np.ndarray, offset: int) -> tuple[np.ndarray, np.ndarray]:
+        """Position transform of per-head Q/K after the projections."""
+        return Q, K
+
+    def _position_encode_backward(self, d_Q: np.ndarray, d_K: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        return d_Q, d_K
+
     def _attend(self, Q: np.ndarray, K: np.ndarray, V: np.ndarray) -> np.ndarray:
         """Uncached attention core: (B, H, T, d_k) → (B, H, T, d_k).
 
@@ -128,6 +141,7 @@ class Attention(Layer):
         Q = self._split_heads(self.W_Q.forward(x))
         K = self._split_heads(self.W_K.forward(x))
         V = self._split_heads(self.W_V.forward(x))
+        Q, K = self._position_encode(Q, K, self._cache_len if use_cache else 0)
 
         if use_cache:
             return self._forward_cached(Q, K, V, B, T)
@@ -170,6 +184,7 @@ class Attention(Layer):
     def backward(self, grad: np.ndarray) -> np.ndarray:
         d_out = self._split_heads(self.W_O.backward(grad))
         d_Q, d_K, d_V = self._attend_backward(d_out)
+        d_Q, d_K = self._position_encode_backward(d_Q, d_K)
         return (
             self.W_Q.backward(self._merge_heads(d_Q))
             + self.W_K.backward(self._merge_heads(d_K))
@@ -190,6 +205,30 @@ class MultiHeadAttention(Attention):
     name so models read as "standard attention" and variants read as
     deviations from it.
     """
+
+
+class RoPEAttention(Attention):
+    """Multi-head self-attention with rotary position embedding (RoPE).
+
+    Derives from `Attention` via the position hooks: Q and K are rotated by
+    their absolute positions right after the projections (`offset` = cache
+    length when decoding, so cached keys are stored already rotated and the
+    relative-position property holds across decode steps). The backward hook
+    applies the inverse rotation. A model using this needs no additive
+    positional embedding at the input.
+    """
+
+    def __init__(self, d_model: int, n_heads: int, causal: bool = True,
+                 max_cache_len: int = 512, rope_base: float = 10000.0):
+        super().__init__(d_model, n_heads, causal=causal, max_cache_len=max_cache_len)
+        self.rope = RotaryPositionalEmbedding(self.d_k, max_seq_len=max_cache_len,
+                                              base=rope_base)
+
+    def _position_encode(self, Q: np.ndarray, K: np.ndarray, offset: int) -> tuple[np.ndarray, np.ndarray]:
+        return self.rope.forward(Q, offset), self.rope.forward(K, offset)
+
+    def _position_encode_backward(self, d_Q: np.ndarray, d_K: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        return self.rope.backward(d_Q), self.rope.backward(d_K)
 
 
 class TransformerBlock(Layer):
