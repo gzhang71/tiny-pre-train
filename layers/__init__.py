@@ -10,9 +10,11 @@ from layers.embedding import (
 from layers.feedforward import FeedForward
 from layers.residual import ResidualBlock
 from layers.attention import (
+    Attention,
     MultiHeadAttention,
     TransformerBlock,
     RelativePositionBias,
     T5SelfAttention,
     CrossAttention,
 )
+from layers.flash_attention import FlashAttention, FlashAttention2
