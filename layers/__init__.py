@@ -9,6 +9,7 @@ from layers.embedding import (
     FeatureEmbedding,
 )
 from layers.feedforward import FeedForward, SwiGLU
+from layers.moe import MoEFeedForward
 from layers.residual import ResidualBlock
 from layers.attention import (
     Attention,
