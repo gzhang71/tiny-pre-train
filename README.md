@@ -9,23 +9,46 @@ A from-scratch machine learning library built on pure NumPy — no PyTorch, no T
 - Activations: `ReLU`, `Sigmoid`, `Tanh`, `SiLU`, `GeLU`
 - `LayerNorm` — with learnable `gamma`/`beta`
 - `RMSNorm` — LayerNorm without mean-centering or bias (Llama-style)
-- `Embedding`, `SinusoidalPositionalEmbedding`, `LearnedPositionalEmbedding`, `FeatureEmbedding`
+- `Embedding`, `SinusoidalPositionalEmbedding`, `LearnedPositionalEmbedding`,
+  `RotaryPositionalEmbedding` (RoPE), `FeatureEmbedding`
 - `FeedForward` — position-wise FFN with configurable activation and expansion factor
 - `SwiGLU` — gated FFN `W2(SiLU(W1x) ⊙ W3x)`; swap into `TransformerBlock` via `ffn_cls=SwiGLU`
-- `MoEFeedForward` — mixture-of-experts FFN with top-k routing; `from_dense()` upcycles a trained dense FFN into experts
+- `MoEFeedForward` — mixture-of-experts FFN with top-k routing and an optional
+  Switch-style load-balancing aux loss (`aux_coef=`); `from_dense()` upcycles a
+  trained dense FFN into experts
 - `ResidualBlock` — two-layer MLP-style residual block
 - `Dropout` — inverted dropout; identity in eval mode (`model.eval()`)
-- `MultiHeadAttention` — scaled dot-product with optional causal mask, grouped-query
-  attention (`n_kv_heads=`), and key padding masks
-- `TransformerBlock` — pre-norm residual (attention + FFN)
-- `T5SelfAttention`, `CrossAttention`, `RelativePositionBias` — T5-specific attention variants
+- `TransformerBlock` — pre-norm residual (attention + FFN), with swappable
+  `attention_cls=` / `ffn_cls=`
+
+**Attention** — one `Attention` base class owns the Q/K/V/O projections, head
+split/merge and the static KV cache; every variant is a hook override, so they
+compose (a RoPE + flash attention is just a mixin of the two):
+- `MultiHeadAttention` — the base behavior: scaled dot-product with optional
+  causal mask, grouped-query attention (`n_kv_heads=`, `n_kv_heads=1` is MQA),
+  and key padding masks
+- `RoPEAttention` — rotary position embedding applied to Q/K inside attention,
+  so the model needs no input-level positional embedding
+- `FlashAttention`, `FlashAttention2` — exact attention via tiled online softmax;
+  the (T, T) score matrix is never formed (v1 KV-outer loop, v2 Q-outer loop)
+- `T5SelfAttention`, `CrossAttention`, `RelativePositionBias` — T5-specific variants
+
+**Classification heads** — `Head` subclasses mapping features to logits, all
+gradient-checked and interchangeable (see `examples/heads.py`):
+- `LinearHead` — standard affine projection
+- `EuclideanHead` — negative squared distance to learnable prototypes
+- `CosineHead` — normalized features × normalized class weights, learnable scale
+- `HyperbolicHead` — Poincaré-ball geodesic distance to prototypes, with
+  prototypes stored in tangent space so the Euclidean optimizers work unchanged
 
 **Models**
 - `MLP` — arbitrary-depth multilayer perceptron
 - `Sequential` — ordered layer container
 - `ResNet` — stack of residual blocks with input/output projections
 - `Transformer` — GPT-style decoder-only transformer (sinusoidal positional encoding)
-- `GPT2` — decoder-only with learned positional embeddings, GeLU FFN, weight-tied output projection, and autoregressive `generate()`
+- `GPT2` — decoder-only with learned positional embeddings, GeLU FFN, weight-tied
+  output projection, optional grouped-query attention (`n_kv_heads=`), key padding
+  masks, and KV-cached autoregressive `generate()`
 - `T5` — encoder-decoder with relative position bias, shared embeddings, and weight-tied output head
 - `VAE` — variational autoencoder with reparameterization trick and KL loss
 
@@ -44,7 +67,10 @@ A from-scratch machine learning library built on pure NumPy — no PyTorch, no T
 - `tests/gradcheck.py` — finite-difference gradient checking; every layer, head,
   and loss is verified against central differences
 - equivalence tests: FlashAttention ≡ dense attention, cached decoding ≡ a full
-  forward pass, jax backend ≡ numpy backend
+  forward pass, GQA ≡ multi-head attention with tiled KV heads, padding masks ≡
+  the equivalent shorter sequence, jax backend ≡ numpy backend
+- training tests: gradient accumulation ≡ one large batch, AdamW decay coupling,
+  clipping, LR schedules, checkpoint save/load round-trips
 
 ## Running examples
 
@@ -58,6 +84,7 @@ python -m examples.transformer  # next-token prediction
 python -m examples.gpt2         # token generation
 python -m examples.t5           # seq2seq copy task
 python -m examples.vae          # 2D cluster reconstruction
+python -m examples.heads        # the four head geometries on the same MLP body
 python -m examples.checkpoint_averaging  # averaged snapshots beat the last one
 python -m examples.moe_upcycle  # dense→MoE upcycling, then expert specialization
 python -m examples.train_100m       # 113.8M-param dense GPT-2 on this repo's source
@@ -163,12 +190,16 @@ tiny-pre-train/
 │   ├── linear.py          #   Linear
 │   ├── activations.py     #   ReLU, Sigmoid, Tanh, SiLU, GeLU
 │   ├── normalization.py   #   LayerNorm, RMSNorm
-│   ├── embedding.py       #   Embedding + positional/feature variants
+│   ├── embedding.py       #   Embedding + positional (incl. RoPE)/feature variants
 │   ├── feedforward.py     #   FeedForward, SwiGLU (position-wise FFNs)
 │   ├── moe.py             #   MoEFeedForward (top-k routed mixture of experts)
 │   ├── residual.py        #   ResidualBlock
 │   ├── dropout.py         #   Dropout (train/eval aware)
-│   └── attention.py       #   MultiHeadAttention (+GQA, padding masks), TransformerBlock
+│   ├── heads.py           #   Head base + Linear/Euclidean/Cosine/Hyperbolic heads
+│   ├── flash_attention.py #   FlashAttention, FlashAttention2 (tiled online softmax)
+│   └── attention.py       #   Attention base (+GQA, KV cache, padding masks),
+│                          #   MultiHeadAttention, RoPEAttention, T5 variants,
+│                          #   TransformerBlock
 ├── models/                # full models composed from layers
 │   ├── mlp.py             #   MLP
 │   ├── sequential.py      #   Sequential
@@ -178,11 +209,30 @@ tiny-pre-train/
 │   ├── t5.py              #   T5 (encoder-decoder)
 │   └── vae.py             #   VAE
 ├── losses/                # MSELoss, SoftmaxCrossEntropy, BinaryCrossEntropy, BCEWithLogits
-├── optim/                 # SGD, Momentum, ADAM, AdamW + schedules + gradient clipping
+├── optim/                 # parameter updates — each takes the flat parameter list
+│   ├── sgd.py             #   SGD (plain gradient descent)
+│   ├── momentum.py        #   Momentum (SGD + velocity buffer)
+│   ├── adam.py            #   ADAM (bias-corrected first/second moments)
+│   ├── adamw.py           #   AdamW (decoupled decay) + decay_groups(model)
+│   ├── schedule.py        #   ConstantLR, LinearWarmup, CosineWithWarmup,
+│   │                      #   InverseSqrt — a schedule is just step -> lr
+│   └── clip.py            #   clip_grad_norm, grad_global_norm
 ├── metrics/               # precision, recall, f1_score, accuracy
 ├── training/              # Trainer (fit / predict / evaluate loop), checkpoint utils
 ├── tests/                 # gradient checks + equivalence tests (no dependencies)
-└── examples/              # one runnable script per model
+└── examples/              # one runnable script per model / technique
+    ├── mlp.py             #   spiral classification (the Trainer walkthrough above)
+    ├── sequential.py      #   noisy sine-wave regression
+    ├── resnet.py          #   checkerboard classification
+    ├── transformer.py     #   next-token prediction on a repeating sequence
+    ├── gpt2.py            #   train on a repeating alphabet, then generate()
+    ├── t5.py              #   seq2seq copy task (encoder-decoder)
+    ├── vae.py             #   2D two-cluster reconstruction
+    ├── heads.py           #   same MLP body under all four head geometries
+    ├── checkpoint_averaging.py  # averaged late snapshots beat the last one
+    ├── moe_upcycle.py     #   dense FFN -> 4 experts, then specialization
+    ├── train_100m.py      #   113.8M dense GPT-2 on this repo's source
+    └── train_100m_moe.py  #   170.5M MoE GPT-2 (94.9M active/token)
 ```
 
 **Class hierarchy.** `Module` is the root: its `parameters()` recurses through `__dict__`, collecting every `Parameter` and nested `Module`, so composition alone wires up the parameter tree. `Layer` and `Model` subclass `Module` purely for naming — layers are building blocks, models are top-level compositions. `Loss` is a separate hierarchy (`forward` returns a scalar, `backward` returns `d_loss/d_pred` from stored state), and `Optimizer` takes the flat parameter list and mutates `.data` in `step()`. `Module.train()` / `Module.eval()` set `self.training` recursively over the same tree, which is what makes `Dropout` an identity at inference.
@@ -286,6 +336,17 @@ therefore 4× the model size, plus activations; inference needs only the weights
 
 ## Dependencies
 
-- Python 3.10+
+- Python 3.11+
 - NumPy
 - JAX (optional, only for `TINY_PRE_TRAIN_BACKEND=jax`)
+- pytest (optional — `python -m tests.run_all` needs nothing beyond NumPy)
+
+Everything runs straight from a clone as long as the commands are issued from the
+repo root, which is what puts `core/`, `layers/`, … on `sys.path`. There is no
+umbrella package: `tiny-pre-train` is not a valid Python identifier, so the
+top-level directories *are* the importable packages. To run from anywhere instead,
+install them:
+
+```bash
+pip install -e .            # plus [jax] and/or [dev] for the optional extras
+```
